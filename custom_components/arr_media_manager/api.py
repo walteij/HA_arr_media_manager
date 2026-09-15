@@ -379,7 +379,13 @@ def normalize_quality_profiles(data: list[dict[str, Any]] | None) -> list[Qualit
 def normalize_lookup_result(data: dict[str, Any] | None, application: str = "arr") -> LookupResult | None:
     if not isinstance(data, dict):
         return None
-    foreign_id = data.get("foreignId") or data.get("tvdbId") or data.get("tmdbId") or data.get("imdbId")
+    foreign_id = (
+        data.get("foreignId")
+        or data.get("foreignArtistId")
+        or data.get("tvdbId")
+        or data.get("tmdbId")
+        or data.get("imdbId")
+    )
     if data.get("tvdbId") is not None:
         lookup_id = f"tvdb:{data['tvdbId']}"
     elif data.get("tmdbId") is not None:
@@ -388,13 +394,15 @@ def normalize_lookup_result(data: dict[str, Any] | None, application: str = "arr
         lookup_id = f"imdb:{data['imdbId']}"
     elif data.get("foreignId") is not None:
         lookup_id = f"foreign:{data['foreignId']}"
+    elif data.get("foreignArtistId") is not None:
+        lookup_id = f"foreignArtist:{data['foreignArtistId']}"
     elif data.get("id") is not None:
         lookup_id = f"{application}:{data['id']}"
     else:
         return None
     return LookupResult(
         lookup_id=lookup_id,
-        title=data.get("title") or data.get("name"),
+        title=data.get("title") or data.get("name") or data.get("artistName"),
         year=data.get("year"),
         media_type=data.get("mediaType") or data.get("type") or {
             "sonarr": "series",

@@ -123,6 +123,45 @@ async def test_async_lookup_rejects_dictionary_shaped_top_level_response():
         await adapter.async_lookup("Dune")
 
 
+async def test_lidarr_lookup_normalizes_artist_fields():
+    adapter = LidarrAdapter(
+        DummyClient(
+            [
+                {
+                    "artistName": "Metallica",
+                    "foreignArtistId": "metallica-id",
+                    "overview": "Heavy metal band",
+                }
+            ]
+        )
+    )
+
+    results = await adapter.async_lookup("Metallica")
+
+    assert len(results) == 1
+    assert results[0].lookup_id == "foreignArtist:metallica-id"
+    assert results[0].title == "Metallica"
+    assert results[0].foreign_id == "metallica-id"
+
+
+async def test_lidarr_search_and_add_uses_normalized_artist_result():
+    adapter = LidarrAdapter(
+        DummyClient(
+            [
+                {
+                    "artistName": "Metallica",
+                    "foreignArtistId": "metallica-id",
+                }
+            ]
+        )
+    )
+
+    result = await adapter.async_search_and_add("Metallica")
+
+    assert result["artistName"] == "Metallica"
+    assert result["foreignArtistId"] == "metallica-id"
+
+
 def test_lookup_result_exact_match_uses_attributes():
     adapter = DummyAdapter(DummyClient())
     result = adapter._choose_lookup_result(
