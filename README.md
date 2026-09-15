@@ -39,47 +39,9 @@ This section is intentionally left as a placeholder for screenshots in a normal 
 3. Restart Home Assistant.
 4. Add the integration from Settings > Devices & Services > Add Integration.
 
-## Lovelace search and download card
+## Lovelace cards
 
-The repository includes a simple card for searching an ARR application and immediately starting its search/download workflow.
-
-1. Copy `www/arr-media-manager-card.js` to your Home Assistant `config/www/` directory.
-2. Add `/local/arr-media-manager-card.js` as a Lovelace resource of type `JavaScript module`.
-3. Add the card to a dashboard and replace the config entry ID with the ID of the Sonarr, Radarr, or Lidarr entry you want to use.
-
-```yaml
-type: custom:arr-media-manager-card
-title: ARR zoeken
-config_entry_id: YOUR_CONFIG_ENTRY_ID
-```
-
-The selected config entry determines whether the request goes to Sonarr, Radarr, or Lidarr. The card sends `arr_media_manager.search_and_add` with `search_after_add: true`.
-
-## Lovelace result selection card
-
-For a lookup-first workflow, use `www/arr-media-search-card.js`. It calls `arr_media_manager.lookup`, shows every normalized result with poster, title, year, media type, overview, and existing status, and provides an `Add` button for each result. The selected result is sent to `arr_media_manager.add_media` using its stable `lookup_id`.
-
-Copy the file to `<config>/www/arr-media-search-card.js`, register `/local/arr-media-search-card.js` as a JavaScript module resource, and add this card:
-
-```yaml
-type: custom:arr-media-search-card
-title: ARR media zoeken
-config_entry_id: YOUR_CONFIG_ENTRY_ID
-search_after_add: true
-monitoring_mode: all
-root_folder_options:
-  - /media/movies
-  - /media/tv
-quality_profile_options:
-  - value: 1
-    label: HD-1080p
-  - value: 2
-    label: 4K
-```
-
-  Supported card options include `title`, `config_entry_id`, `max_results`, `search_after_add`, `show_overview`, `show_posters`, `show_existing`, `confirm_before_add`, `default_query`, `compact`, `result_columns`, and `hide_application_name`. The card editor provides a config-entry selector filtered to `arr_media_manager`. The config entry determines whether the request goes to Sonarr, Radarr, or Lidarr; there is no separate application selector. `root_folder_options` and `quality_profile_options` are optional because these values are instance-specific. When supplied, they are rendered as selectors and passed to `add_media`.
-
-  Home Assistant does not automatically register JavaScript files from a custom integration's root `www/` folder. Register `/local/arr-media-search-card.js` manually as a JavaScript module after copying the file to `<config>/www/`. Restart Home Assistant after installing or upgrading the integration, then hard-refresh the browser if an older card remains cached. The card exposes version `1.0.0` and guards custom-element registration so loading the resource twice does not throw.
+The ARR Lovelace cards are maintained in the separate [HA-Walteij-Lovelace](https://github.com/walteij/HA-Walteij-Lovelace) frontend repository. Install that repository through HACS under **Frontend** and register the card resources from there. This integration repository intentionally contains no Lovelace JavaScript files.
 
 ## Manual installation
 
