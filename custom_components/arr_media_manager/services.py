@@ -85,11 +85,9 @@ async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[st
     max_results = int(call.data.get("max_results", 10))
     if not query:
         raise ValueError("query is required")
-    raw_results = await adapter.async_lookup(query, max_results=max_results)
     results = [
         asdict(normalized)
-        for item in raw_results
-        if (normalized := normalize_lookup_result(item, adapter.application)) is not None
+        for normalized in await adapter.async_lookup(query, max_results=max_results)
     ]
     return {
         "status": "ok",

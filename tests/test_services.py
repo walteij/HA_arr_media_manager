@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from homeassistant.core import SupportsResponse
 
+from custom_components.arr_media_manager.api import normalize_lookup_results
 from custom_components.arr_media_manager.services import (
     async_handle_add_media,
     async_handle_lookup,
@@ -14,8 +15,8 @@ from custom_components.arr_media_manager.services import (
 class LookupAdapter:
     application = "radarr"
 
-    async def async_lookup(self, query: str, *, max_results: int) -> list[dict[str, object]]:
-        return [
+    async def async_lookup(self, query: str, *, max_results: int):
+        return normalize_lookup_results(
             {
                 "id": 42,
                 "title": query,
@@ -23,8 +24,9 @@ class LookupAdapter:
                 "tmdbId": "42",
                 "overview": "Description",
                 "max_results": max_results,
-            }
-        ]
+            },
+            self.application,
+        )
 
     async def async_search_and_add(self, query: str, **kwargs: object) -> dict[str, object]:
         return {"query": query, "search_after_add": kwargs["search_after_add"]}

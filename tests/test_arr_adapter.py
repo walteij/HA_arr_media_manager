@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from custom_components.arr_media_manager.base_adapter import BaseARRAdapter
+from custom_components.arr_media_manager.lidarr import LidarrAdapter
+from custom_components.arr_media_manager.radarr import RadarrAdapter
 from custom_components.arr_media_manager.sonarr import SonarrAdapter
 
 
 class DummyClient:
-    def __init__(self) -> None:
+    def __init__(self, lookup_response=None) -> None:
         self.calls: list[tuple[str, dict | None]] = []
+        self.lookup_response = lookup_response
 
     async def get(self, endpoint: str, *, params=None):
         self.calls.append(("GET", {"endpoint": endpoint, "params": params}))
+        if endpoint.endswith("lookup") and self.lookup_response is not None:
+            return self.lookup_response
         return []
 
     async def post(self, endpoint: str, *, json_body=None, params=None):
@@ -80,3 +85,28 @@ async def test_sonarr_adapter_build_media_payload_uses_tvdb_id():
     assert payload["monitor"] == "all"
     assert payload["addOptions"]["searchForMissingEpisodes"] is True
     assert payload["tvdbId"] == 12345
+
+
+async def test_all_arr_lookup_adapters_return_normalized_lists():
+    for adapter in (
+        SonarrAdapter(DummyClient()),
+        RadarrAdapter(DummyClient()),
+        LidarrAdapter(DummyClient()),
+    ):
+        results = await adapter.async_lookup("Dune")
+        assert isinstance(results, list)
+
+
+async def test_async_lookup_normalizes_all_supported_response_shapes():
+    responses = [
+        {"tmdbId": 1, "title": "Dune"},
+        [{"tmdbId": 1, "title": "Dune"}, {"tmdbId": 2, "title": "Dune Part Two"}],
+        [],
+        {"malformed": True},
+    ]
+
+    for response in responses:
+        adapter = RadarrAdapter(DummyClient(response))
+        results = await adapter.async_lookup("Dune")
+        assert isinstance(results, list)
+        assert all(result.lookup_id.startswith("tmdb:") for result in results)

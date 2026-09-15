@@ -401,3 +401,22 @@ def normalize_lookup_result(data: dict[str, Any] | None, application: str = "arr
         poster_url=data.get("remotePoster") or data.get("posterUrl"),
         already_exists=bool(data.get("existing") or data.get("inLibrary")),
     )
+
+
+def normalize_lookup_results(
+    data: dict[str, Any] | list[Any] | None,
+    application: str = "arr",
+) -> list[LookupResult]:
+    """Normalize ARR lookup responses into a predictable list."""
+    if isinstance(data, dict):
+        items: list[Any] = [data]
+    elif isinstance(data, list):
+        items = data
+    else:
+        return []
+
+    return [
+        normalized
+        for item in items
+        if (normalized := normalize_lookup_result(item, application)) is not None
+    ]

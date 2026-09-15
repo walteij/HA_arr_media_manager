@@ -8,7 +8,9 @@ from .api import (
     ArrConflictError,
     ArrNotFoundError,
     ArrUnsupportedOperationError,
+    LookupResult,
     normalize_lookup_result,
+    normalize_lookup_results,
 )
 
 
@@ -85,8 +87,23 @@ class BaseARRAdapter(ABC):
     async def async_get_library_summary(self) -> dict[str, Any]:
         return await self.client.get(self.library_endpoint)
 
-    async def async_lookup(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
-        return await self.client.get(self.lookup_endpoint, params={"term": query, "limit": max_results})
+    async def async_lookup(self, query: str, *, max_results: int = 10) -> list[LookupResult]:
+        raw_results = await self.client.get(
+            self.lookup_endpoint,
+            params={"term": query, "limit": max_results},
+        )
+        return normalize_lookup_results(raw_results, self.application)
+
+    async def async_lookup_raw(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
+        raw_results = await self.client.get(
+            self.lookup_endpoint,
+            params={"term": query, "limit": max_results},
+        )
+        if isinstance(raw_results, dict):
+            return [raw_results]
+        if isinstance(raw_results, list):
+            return [item for item in raw_results if isinstance(item, dict)]
+        return []
 
     async def async_add_media(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = await self.client.post(self.media_endpoint, json_body=payload)
@@ -97,7 +114,7 @@ class BaseARRAdapter(ABC):
         if not lookup_id or ":" not in lookup_id:
             raise ArrNotFoundError("Invalid lookup_id")
         _, identifier = lookup_id.split(":", 1)
-        candidates = await self.async_lookup(identifier, max_results=50)
+        candidates = await self.async_lookup_raw(identifier, max_results=50)
         matches = []
         for item in candidates:
             normalized = normalize_lookup_result(item, self.application)
@@ -137,7 +154,11 @@ class BaseARRAdapter(ABC):
         foreign_id: str | None = None,
     ) -> dict[str, Any]:
         """Resolve the best match, build the payload, and add it to the ARR library."""
-        matches = lookup_results if lookup_results is not None else await self.async_lookup(query, max_results=10)
+        matches = (
+            lookup_results
+            if lookup_results is not None
+            else await self.async_lookup_raw(query, max_results=10)
+        )
         selected = self._choose_lookup_result(
             query=query,
             matches=matches,
