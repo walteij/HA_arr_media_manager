@@ -144,7 +144,7 @@ class BaseARRAdapter(ABC):
         self,
         query: str,
         *,
-        lookup_results: list[dict[str, Any]] | None = None,
+        lookup_results: list[dict[str, Any] | LookupResult] | None = None,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
@@ -182,11 +182,11 @@ class BaseARRAdapter(ABC):
         self,
         *,
         query: str,
-        matches: list[dict[str, Any]],
+        matches: list[dict[str, Any] | LookupResult],
         exact_match: bool,
         year: int | None,
         foreign_id: str | None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any] | LookupResult | None:
         if not matches:
             return None
 
@@ -194,12 +194,8 @@ class BaseARRAdapter(ABC):
         foreign_id_norm = self._normalize_text(foreign_id) if foreign_id else None
         year_norm = year
 
-        def score(item: dict[str, Any]) -> tuple[int, int, int]:
-            title = self._normalize_text(item.get("title") or item.get("name") or "")
-            item_year = item.get("year")
-            item_foreign = self._normalize_text(
-                item.get("foreignId") or item.get("tvdbId") or item.get("tmdbId") or item.get("imdbId") or ""
-            )
+        def score(item: dict[str, Any] | LookupResult) -> tuple[int, int, int]:
+            title, item_year, item_foreign, already_exists = self._match_fields(item)
 
             score_value = 0
             if foreign_id_norm and item_foreign == foreign_id_norm:
@@ -210,26 +206,48 @@ class BaseARRAdapter(ABC):
                 score_value += 20
             if year_norm is not None and item_year == year_norm:
                 score_value += 30
-            if item.get("existing"):
+            if already_exists:
                 score_value -= 10
             return (score_value, 1 if item_year == year_norm else 0, 0 if not title else 1)
 
         if exact_match:
-            for item in matches:
-                title = self._normalize_text(item.get("title") or item.get("name") or "")
-                item_year = item.get("year")
-                if title == query_norm and (year_norm is None or item_year == year_norm):
-                    return item
-                if foreign_id_norm:
-                    item_foreign = self._normalize_text(
-                        item.get("foreignId") or item.get("tvdbId") or item.get("tmdbId") or item.get("imdbId") or ""
-                    )
+            if foreign_id_norm:
+                for item in matches:
+                    _, _, item_foreign, _ = self._match_fields(item)
                     if item_foreign == foreign_id_norm:
                         return item
+            for item in matches:
+                title, item_year, _, _ = self._match_fields(item)
+                if title == query_norm and (year_norm is None or item_year == year_norm):
+                    return item
             return matches[0]
 
         best = sorted(matches, key=score, reverse=True)[0]
         return best
+
+    def _match_fields(
+        self,
+        item: dict[str, Any] | LookupResult,
+    ) -> tuple[str, int | None, str, bool]:
+        if isinstance(item, LookupResult):
+            return (
+                self._normalize_text(item.title),
+                item.year,
+                self._normalize_text(item.foreign_id),
+                item.already_exists,
+            )
+        return (
+            self._normalize_text(item.get("title") or item.get("name") or ""),
+            item.get("year"),
+            self._normalize_text(
+                item.get("foreignId")
+                or item.get("tvdbId")
+                or item.get("tmdbId")
+                or item.get("imdbId")
+                or ""
+            ),
+            bool(item.get("existing")),
+        )
 
     @staticmethod
     def _normalize_text(value: Any) -> str:

@@ -110,6 +110,11 @@ class LookupResult:
     poster_url: str | None = None
     already_exists: bool = False
 
+    @property
+    def id(self) -> str:
+        """Compatibility alias for callers that use lookup.id."""
+        return self.lookup_id
+
 
 @dataclass(slots=True)
 class AddMediaRequest:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .api import LookupResult
 from .base_adapter import BaseARRAdapter
 
 
@@ -34,16 +35,18 @@ class LidarrAdapter(BaseARRAdapter):
 
     def build_media_payload(
         self,
-        lookup_result: dict[str, Any],
+        lookup_result: dict[str, Any] | LookupResult,
         *,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
         search_after_add: bool = False,
     ) -> dict[str, Any]:
+        title = lookup_result.title if isinstance(lookup_result, LookupResult) else lookup_result.get("title") or lookup_result.get("name")
+        foreign_id = lookup_result.foreign_id if isinstance(lookup_result, LookupResult) else lookup_result.get("foreignId")
         payload: dict[str, Any] = {
-            "artistName": lookup_result.get("title") or lookup_result.get("name"),
-            "foreignArtistId": lookup_result.get("foreignId"),
+            "artistName": title,
+            "foreignArtistId": foreign_id,
             "monitored": True,
             "addOptions": {
                 "searchForMissingAlbums": search_after_add,

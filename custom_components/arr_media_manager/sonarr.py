@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .api import LookupResult
 from .base_adapter import BaseARRAdapter
 
 
@@ -46,17 +47,21 @@ class SonarrAdapter(BaseARRAdapter):
 
     def build_media_payload(
         self,
-        lookup_result: dict[str, Any],
+        lookup_result: dict[str, Any] | LookupResult,
         *,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
         search_after_add: bool = False,
     ) -> dict[str, Any]:
+        title = lookup_result.title if isinstance(lookup_result, LookupResult) else lookup_result.get("title") or lookup_result.get("name")
+        tvdb_id = lookup_result.foreign_id if isinstance(lookup_result, LookupResult) else lookup_result.get("tvdbId")
+        imdb_id = None if isinstance(lookup_result, LookupResult) else lookup_result.get("imdbId")
+        images = [] if isinstance(lookup_result, LookupResult) else lookup_result.get("images", [])
         profile_id = quality_profile if isinstance(quality_profile, int) else None
         payload: dict[str, Any] = {
-            "title": lookup_result.get("title") or lookup_result.get("name"),
-            "images": lookup_result.get("images", []),
+            "title": title,
+            "images": images,
             "monitored": True,
             "addOptions": {
                 "searchForMissingEpisodes": search_after_add,
@@ -70,10 +75,10 @@ class SonarrAdapter(BaseARRAdapter):
             payload["qualityProfileId"] = profile_id
         if monitoring_mode:
             payload["monitor"] = monitoring_mode
-        if lookup_result.get("tvdbId") is not None:
-            payload["tvdbId"] = int(lookup_result["tvdbId"])
-        if lookup_result.get("imdbId") is not None:
-            payload["imdbId"] = lookup_result["imdbId"]
+        if tvdb_id is not None:
+            payload["tvdbId"] = int(tvdb_id)
+        if imdb_id is not None:
+            payload["imdbId"] = imdb_id
         return payload
 
     async def async_search_monitored_episodes(self) -> dict[str, Any]:

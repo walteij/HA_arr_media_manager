@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from custom_components.arr_media_manager.api import LookupResult
 from custom_components.arr_media_manager.base_adapter import BaseARRAdapter
 from custom_components.arr_media_manager.lidarr import LidarrAdapter
 from custom_components.arr_media_manager.radarr import RadarrAdapter
@@ -36,8 +37,9 @@ class DummyAdapter(BaseARRAdapter):
     media_endpoint = "/api/test/media"
 
     def build_media_payload(self, lookup_result, *, root_folder=None, quality_profile=None, monitoring_mode=None, search_after_add=False):
+        title = lookup_result.title if isinstance(lookup_result, LookupResult) else lookup_result.get("title")
         return {
-            "title": lookup_result.get("title"),
+            "title": title,
             "rootFolderPath": root_folder,
             "qualityProfileId": quality_profile,
             "monitor": monitoring_mode,
@@ -110,3 +112,66 @@ async def test_async_lookup_normalizes_all_supported_response_shapes():
         results = await adapter.async_lookup("Dune")
         assert isinstance(results, list)
         assert all(result.lookup_id.startswith("tmdb:") for result in results)
+
+
+def test_lookup_result_exact_match_uses_attributes():
+    adapter = DummyAdapter(DummyClient())
+    result = adapter._choose_lookup_result(
+        query="Dune",
+        matches=[
+            LookupResult(lookup_id="tmdb:2", title="Dune Part Two", year=2024),
+            LookupResult(lookup_id="tmdb:1", title="Dune", year=2021),
+        ],
+        exact_match=True,
+        year=None,
+        foreign_id=None,
+    )
+
+    assert isinstance(result, LookupResult)
+    assert result.lookup_id == "tmdb:1"
+
+
+def test_lookup_result_year_comparison_uses_attributes():
+    adapter = DummyAdapter(DummyClient())
+    result = adapter._choose_lookup_result(
+        query="Dune",
+        matches=[
+            LookupResult(lookup_id="tmdb:1", title="Dune", year=1984),
+            LookupResult(lookup_id="tmdb:2", title="Dune", year=2021),
+        ],
+        exact_match=True,
+        year=2021,
+        foreign_id=None,
+    )
+
+    assert isinstance(result, LookupResult)
+    assert result.year == 2021
+
+
+def test_lookup_result_foreign_id_comparison_uses_attributes():
+    adapter = DummyAdapter(DummyClient())
+    result = adapter._choose_lookup_result(
+        query="Dune",
+        matches=[
+            LookupResult(lookup_id="tmdb:1", title="Dune", foreign_id="111"),
+            LookupResult(lookup_id="tmdb:2", title="Dune", foreign_id="222"),
+        ],
+        exact_match=True,
+        year=None,
+        foreign_id="222",
+    )
+
+    assert isinstance(result, LookupResult)
+    assert result.foreign_id == "222"
+
+
+async def test_search_and_add_accepts_lookup_result_instances():
+    adapter = DummyAdapter(DummyClient())
+
+    result = await adapter.async_search_and_add(
+        "Dune",
+        lookup_results=[LookupResult(lookup_id="tmdb:1", title="Dune", year=2021)],
+        exact_match=True,
+    )
+
+    assert result["title"] == "Dune"
