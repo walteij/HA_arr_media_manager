@@ -3,13 +3,14 @@ from __future__ import annotations
 import pytest
 from homeassistant.core import SupportsResponse
 
-from custom_components.arr_media_manager.api import normalize_lookup_results
+from custom_components.arr_media_manager.api import LookupResult, normalize_lookup_results
 from custom_components.arr_media_manager.services import (
     async_handle_add_media,
     async_handle_lookup,
     async_handle_search_and_add,
     async_register_services,
 )
+from custom_components.arr_media_manager.sonarr import SonarrAdapter
 
 
 class LookupAdapter:
@@ -31,11 +32,17 @@ class LookupAdapter:
     async def async_search_and_add(self, query: str, **kwargs: object) -> dict[str, object]:
         return {"query": query, "search_after_add": kwargs["search_after_add"]}
 
-    async def async_resolve_lookup(self, lookup_id: str) -> dict[str, object]:
-        return {"id": 42, "title": "Dune", "year": 2024, "tmdbId": "42"}
+    async def async_resolve_lookup(self, lookup_id: str) -> LookupResult:
+        return LookupResult(
+            lookup_id="tmdb:42",
+            title="Dune",
+            year=2024,
+            media_type="movie",
+            foreign_id="42",
+        )
 
-    def build_media_payload(self, lookup_result: dict[str, object], **kwargs: object) -> dict[str, object]:
-        return {"title": lookup_result["title"], "tmdbId": lookup_result["tmdbId"]}
+    def build_media_payload(self, lookup_result: LookupResult, **kwargs: object) -> dict[str, object]:
+        return {"title": lookup_result.title, "tmdbId": lookup_result.foreign_id}
 
     async def async_add_media(self, payload: dict[str, object]) -> dict[str, object]:
         return {"id": 99, **payload}
@@ -168,3 +175,54 @@ async def test_services_register_response_support() -> None:
         "refresh": SupportsResponse.OPTIONAL,
         "delete_media": SupportsResponse.OPTIONAL,
     }
+
+
+class SonarrRuntimeClient:
+    async def get(self, endpoint: str, *, params: object = None) -> list[dict[str, object]]:
+        assert endpoint == "/api/v3/series/lookup"
+        return [
+            {"title": "Dune: Prophecy", "year": 2024, "tvdbId": 420658, "images": []},
+            {"title": "Dune", "year": 2000, "tvdbId": 265987, "images": []},
+        ]
+
+    async def post(self, endpoint: str, *, json_body: dict[str, object] = None, params: object = None) -> dict[str, object]:
+        assert endpoint == "/api/v3/series"
+        assert json_body["title"] == "Dune"
+        assert json_body["tvdbId"] == 265987
+        return {"id": 123}
+
+
+class SonarrEntry:
+    entry_id = "sonarr-entry"
+    data = {"application": "sonarr"}
+
+
+class SonarrConfigEntries:
+    def async_get_entry(self, entry_id: str) -> SonarrEntry:
+        assert entry_id == "sonarr-entry"
+        return SonarrEntry()
+
+
+class SonarrHass:
+    config_entries = SonarrConfigEntries()
+    data = {
+        "arr_media_manager": {
+            "sonarr-entry": {"adapter": SonarrAdapter(SonarrRuntimeClient())}
+        }
+    }
+
+
+class SonarrCall:
+    data = {
+        "config_entry_id": "sonarr-entry",
+        "query": "Dune",
+        "exact_match": True,
+        "search_after_add": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_and_add_runs_real_sonarr_adapter_pipeline() -> None:
+    result = await async_handle_search_and_add(SonarrHass(), SonarrCall())
+
+    assert result == {"status": "ok", "result": {"id": 123}}

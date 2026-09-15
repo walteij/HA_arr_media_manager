@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
-from .api import ArrApiError, ArrConflictError, normalize_lookup_result
+from .api import ArrApiError, ArrConflictError
 from .const import (
     CONF_AUTO_SEARCH,
     CONF_DEFAULT_MONITORING_MODE,
@@ -89,6 +89,11 @@ async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[st
         asdict(normalized)
         for normalized in await adapter.async_lookup(query, max_results=max_results)
     ]
+    _LOGGER.debug(
+        "Lookup returned %d normalized %s results",
+        len(results),
+        adapter.application,
+    )
     return {
         "status": "ok",
         "config_entry_id": entry.entry_id,
@@ -105,11 +110,10 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
     if lookup_id is None:
         raise ValueError("lookup_id is required")
     lookup_result = await adapter.async_resolve_lookup(str(lookup_id))
-    normalized = normalize_lookup_result(lookup_result, adapter.application)
-    if normalized is None or normalized.lookup_id != str(lookup_id):
+    if lookup_result.lookup_id != str(lookup_id):
         raise ValueError("lookup_id could not be resolved")
-    if normalized.already_exists:
-        raise ArrConflictError(f"{normalized.title or lookup_id} is already in the library")
+    if lookup_result.already_exists:
+        raise ArrConflictError(f"{lookup_result.title or lookup_id} is already in the library")
     payload = adapter.build_media_payload(
         lookup_result,
         root_folder=call.data.get("root_folder") or entry.data.get(CONF_DEFAULT_ROOT_FOLDER),
@@ -133,10 +137,10 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
                 "search_accepted": False,
                 "media": {
                     "media_id": None,
-                    "lookup_id": normalized.lookup_id,
-                    "title": normalized.title,
-                    "year": normalized.year,
-                    "media_type": normalized.media_type,
+                    "lookup_id": lookup_result.lookup_id,
+                    "title": lookup_result.title,
+                    "year": lookup_result.year,
+                    "media_type": lookup_result.media_type,
                 },
                 "message": "Media added, but ARR did not return a media ID for the search request.",
             }
@@ -154,10 +158,10 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
                 "search_accepted": False,
                 "media": {
                     "media_id": media_id,
-                    "lookup_id": normalized.lookup_id,
-                    "title": normalized.title,
-                    "year": normalized.year,
-                    "media_type": normalized.media_type,
+                    "lookup_id": lookup_result.lookup_id,
+                    "title": lookup_result.title,
+                    "year": lookup_result.year,
+                    "media_type": lookup_result.media_type,
                 },
                 "message": f"Media added, but the search could not be started: {err}",
             }
@@ -171,10 +175,10 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
         "search_accepted": search_accepted,
         "media": {
             "media_id": media_id,
-            "lookup_id": normalized.lookup_id,
-            "title": normalized.title,
-            "year": normalized.year,
-            "media_type": normalized.media_type,
+            "lookup_id": lookup_result.lookup_id,
+            "title": lookup_result.title,
+            "year": lookup_result.year,
+            "media_type": lookup_result.media_type,
         },
     }
 
@@ -185,6 +189,11 @@ async def async_handle_search_and_add(hass: HomeAssistant, call: ServiceCall) ->
     if not query:
         raise ValueError("query is required")
     lookup_results = await adapter.async_lookup(query, max_results=10)
+    _LOGGER.debug(
+        "Lookup returned %d normalized %s results",
+        len(lookup_results),
+        adapter.application,
+    )
     result = await adapter.async_search_and_add(
         query,
         lookup_results=lookup_results,

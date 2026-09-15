@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 from .api import (
     ArrApiClient,
     ArrConflictError,
+    ArrInvalidResponseError,
     ArrNotFoundError,
     ArrUnsupportedOperationError,
     LookupResult,
-    normalize_lookup_result,
     normalize_lookup_results,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class BaseARRAdapter(ABC):
@@ -88,38 +91,36 @@ class BaseARRAdapter(ABC):
         return await self.client.get(self.library_endpoint)
 
     async def async_lookup(self, query: str, *, max_results: int = 10) -> list[LookupResult]:
-        raw_results = await self.client.get(
-            self.lookup_endpoint,
-            params={"term": query, "limit": max_results},
-        )
+        raw_results = await self._async_lookup_raw_response(query, max_results=max_results)
         return normalize_lookup_results(raw_results, self.application)
 
-    async def async_lookup_raw(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
+    async def _async_lookup_raw_response(
+        self,
+        query: str,
+        *,
+        max_results: int,
+    ) -> list[dict[str, Any]]:
         raw_results = await self.client.get(
             self.lookup_endpoint,
             params={"term": query, "limit": max_results},
         )
-        if isinstance(raw_results, dict):
-            return [raw_results]
-        if isinstance(raw_results, list):
-            return [item for item in raw_results if isinstance(item, dict)]
-        return []
+        if not isinstance(raw_results, list):
+            raise ArrInvalidResponseError("Expected ARR lookup endpoint to return a list")
+        if not all(isinstance(item, dict) for item in raw_results):
+            raise ArrInvalidResponseError("ARR lookup endpoint returned a non-dictionary result")
+        return raw_results
 
     async def async_add_media(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = await self.client.post(self.media_endpoint, json_body=payload)
         return result if isinstance(result, dict) else {}
 
-    async def async_resolve_lookup(self, lookup_id: str) -> dict[str, Any]:
+    async def async_resolve_lookup(self, lookup_id: str) -> LookupResult:
         """Resolve a stable lookup ID to the current complete ARR lookup payload."""
         if not lookup_id or ":" not in lookup_id:
             raise ArrNotFoundError("Invalid lookup_id")
         _, identifier = lookup_id.split(":", 1)
-        candidates = await self.async_lookup_raw(identifier, max_results=50)
-        matches = []
-        for item in candidates:
-            normalized = normalize_lookup_result(item, self.application)
-            if normalized and normalized.lookup_id == lookup_id:
-                matches.append(item)
+        candidates = await self.async_lookup(identifier, max_results=50)
+        matches = [item for item in candidates if item.lookup_id == lookup_id]
         if not matches:
             raise ArrNotFoundError(f"Lookup result no longer exists: {lookup_id}")
         if len(matches) > 1:
@@ -144,7 +145,7 @@ class BaseARRAdapter(ABC):
         self,
         query: str,
         *,
-        lookup_results: list[dict[str, Any] | LookupResult] | None = None,
+        lookup_results: list[LookupResult] | None = None,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
@@ -157,7 +158,7 @@ class BaseARRAdapter(ABC):
         matches = (
             lookup_results
             if lookup_results is not None
-            else await self.async_lookup_raw(query, max_results=10)
+            else await self.async_lookup(query, max_results=10)
         )
         selected = self._choose_lookup_result(
             query=query,
@@ -168,6 +169,12 @@ class BaseARRAdapter(ABC):
         )
         if selected is None:
             raise ArrUnsupportedOperationError(f"No media found for query: {query}")
+
+        _LOGGER.debug(
+            "Selected lookup result type=%s lookup_id=%s",
+            type(selected).__name__,
+            selected.id,
+        )
 
         payload = self.build_media_payload(
             selected,
@@ -182,11 +189,11 @@ class BaseARRAdapter(ABC):
         self,
         *,
         query: str,
-        matches: list[dict[str, Any] | LookupResult],
+        matches: list[LookupResult],
         exact_match: bool,
         year: int | None,
         foreign_id: str | None,
-    ) -> dict[str, Any] | LookupResult | None:
+    ) -> LookupResult | None:
         if not matches:
             return None
 
@@ -194,7 +201,7 @@ class BaseARRAdapter(ABC):
         foreign_id_norm = self._normalize_text(foreign_id) if foreign_id else None
         year_norm = year
 
-        def score(item: dict[str, Any] | LookupResult) -> tuple[int, int, int]:
+        def score(item: LookupResult) -> tuple[int, int, int]:
             title, item_year, item_foreign, already_exists = self._match_fields(item)
 
             score_value = 0
@@ -225,28 +232,12 @@ class BaseARRAdapter(ABC):
         best = sorted(matches, key=score, reverse=True)[0]
         return best
 
-    def _match_fields(
-        self,
-        item: dict[str, Any] | LookupResult,
-    ) -> tuple[str, int | None, str, bool]:
-        if isinstance(item, LookupResult):
-            return (
-                self._normalize_text(item.title),
-                item.year,
-                self._normalize_text(item.foreign_id),
-                item.already_exists,
-            )
+    def _match_fields(self, item: LookupResult) -> tuple[str, int | None, str, bool]:
         return (
-            self._normalize_text(item.get("title") or item.get("name") or ""),
-            item.get("year"),
-            self._normalize_text(
-                item.get("foreignId")
-                or item.get("tvdbId")
-                or item.get("tmdbId")
-                or item.get("imdbId")
-                or ""
-            ),
-            bool(item.get("existing")),
+            self._normalize_text(item.title),
+            item.year,
+            self._normalize_text(item.foreign_id),
+            item.already_exists,
         )
 
     @staticmethod

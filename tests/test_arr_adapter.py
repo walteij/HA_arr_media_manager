@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from custom_components.arr_media_manager.api import LookupResult
 from custom_components.arr_media_manager.base_adapter import BaseARRAdapter
 from custom_components.arr_media_manager.lidarr import LidarrAdapter
@@ -54,8 +56,8 @@ async def test_adapter_search_and_add_uses_exact_match_when_available():
     payload = await adapter.async_search_and_add(
         "The Expanse",
         lookup_results=[
-            {"title": "The Expanse", "year": 2015, "remotePoster": "poster"},
-            {"title": "The Expanse 2", "year": 2017, "remotePoster": "poster2"},
+            LookupResult(lookup_id="tvdb:1", title="The Expanse", year=2015),
+            LookupResult(lookup_id="tvdb:2", title="The Expanse 2", year=2017),
         ],
         root_folder="/downloads",
         quality_profile="1080p",
@@ -74,7 +76,7 @@ async def test_adapter_search_and_add_uses_exact_match_when_available():
 async def test_sonarr_adapter_build_media_payload_uses_tvdb_id():
     adapter = SonarrAdapter(DummyClient())
     payload = adapter.build_media_payload(
-        {"title": "The Expanse", "tvdbId": "12345"},
+        LookupResult(lookup_id="tvdb:12345", title="The Expanse", foreign_id="12345"),
         root_folder="/tv",
         quality_profile=7,
         monitoring_mode="all",
@@ -101,10 +103,8 @@ async def test_all_arr_lookup_adapters_return_normalized_lists():
 
 async def test_async_lookup_normalizes_all_supported_response_shapes():
     responses = [
-        {"tmdbId": 1, "title": "Dune"},
         [{"tmdbId": 1, "title": "Dune"}, {"tmdbId": 2, "title": "Dune Part Two"}],
         [],
-        {"malformed": True},
     ]
 
     for response in responses:
@@ -112,6 +112,15 @@ async def test_async_lookup_normalizes_all_supported_response_shapes():
         results = await adapter.async_lookup("Dune")
         assert isinstance(results, list)
         assert all(result.lookup_id.startswith("tmdb:") for result in results)
+
+
+async def test_async_lookup_rejects_dictionary_shaped_top_level_response():
+    adapter = RadarrAdapter(DummyClient({"tmdbId": 1, "title": "Dune"}))
+
+    from custom_components.arr_media_manager.api import ArrInvalidResponseError
+
+    with pytest.raises(ArrInvalidResponseError, match="Expected ARR lookup endpoint to return a list"):
+        await adapter.async_lookup("Dune")
 
 
 def test_lookup_result_exact_match_uses_attributes():

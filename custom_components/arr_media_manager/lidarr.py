@@ -35,18 +35,16 @@ class LidarrAdapter(BaseARRAdapter):
 
     def build_media_payload(
         self,
-        lookup_result: dict[str, Any] | LookupResult,
+        lookup_result: LookupResult,
         *,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
         search_after_add: bool = False,
     ) -> dict[str, Any]:
-        title = lookup_result.title if isinstance(lookup_result, LookupResult) else lookup_result.get("title") or lookup_result.get("name")
-        foreign_id = lookup_result.foreign_id if isinstance(lookup_result, LookupResult) else lookup_result.get("foreignId")
         payload: dict[str, Any] = {
-            "artistName": title,
-            "foreignArtistId": foreign_id,
+            "artistName": lookup_result.title,
+            "foreignArtistId": lookup_result.foreign_id,
             "monitored": True,
             "addOptions": {
                 "searchForMissingAlbums": search_after_add,

@@ -35,20 +35,16 @@ class RadarrAdapter(BaseARRAdapter):
 
     def build_media_payload(
         self,
-        lookup_result: dict[str, Any] | LookupResult,
+        lookup_result: LookupResult,
         *,
         root_folder: str | None = None,
         quality_profile: str | int | None = None,
         monitoring_mode: str | None = None,
         search_after_add: bool = False,
     ) -> dict[str, Any]:
-        title = lookup_result.title if isinstance(lookup_result, LookupResult) else lookup_result.get("title") or lookup_result.get("name")
-        tmdb_id = lookup_result.foreign_id if isinstance(lookup_result, LookupResult) else lookup_result.get("tmdbId")
-        imdb_id = None if isinstance(lookup_result, LookupResult) else lookup_result.get("imdbId")
-        images = [] if isinstance(lookup_result, LookupResult) else lookup_result.get("images", [])
         payload: dict[str, Any] = {
-            "title": title,
-            "images": images,
+            "title": lookup_result.title,
+            "images": [],
             "monitored": True,
             "minimumAvailability": "released",
             "addOptions": {
@@ -62,10 +58,8 @@ class RadarrAdapter(BaseARRAdapter):
             payload["qualityProfileId"] = int(quality_profile) if isinstance(quality_profile, str) and quality_profile.isdigit() else quality_profile
         if monitoring_mode:
             payload["monitor"] = monitoring_mode
-        if tmdb_id is not None:
-            payload["tmdbId"] = int(tmdb_id)
-        if imdb_id is not None:
-            payload["imdbId"] = imdb_id
+        if lookup_result.foreign_id is not None:
+            payload["tmdbId"] = int(lookup_result.foreign_id)
         return payload
 
     async def async_search_monitored_movies(self) -> dict[str, Any]:
