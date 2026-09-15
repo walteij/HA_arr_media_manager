@@ -28,6 +28,7 @@ class DummyAdapter(BaseARRAdapter):
     quality_profile_endpoint = "/api/test/qualityprofile"
     root_folder_endpoint = "/api/test/rootfolder"
     command_endpoint = "/api/test/command"
+    media_endpoint = "/api/test/media"
 
     def build_media_payload(self, lookup_result, *, root_folder=None, quality_profile=None, monitoring_mode=None, search_after_add=False):
         return {

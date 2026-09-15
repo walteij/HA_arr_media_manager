@@ -18,6 +18,7 @@ class SonarrAdapter(BaseARRAdapter):
     quality_profile_endpoint = "/api/v3/qualityprofile"
     root_folder_endpoint = "/api/v3/rootfolder"
     command_endpoint = "/api/v3/command"
+    media_endpoint = "/api/v3/series"
 
     @property
     def supported_actions(self) -> set[str]:
@@ -77,6 +78,9 @@ class SonarrAdapter(BaseARRAdapter):
 
     async def async_search_monitored_episodes(self) -> dict[str, Any]:
         return await self.async_trigger_command("MissingEpisodeSearch")
+
+    async def async_search_added_media(self, media_id: str | int) -> dict[str, Any]:
+        return await self.async_trigger_command("MissingEpisodeSearch", seriesId=int(media_id))
 
     async def async_refresh_all_series(self) -> dict[str, Any]:
         return await self.async_trigger_command("RefreshSeries")

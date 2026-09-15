@@ -3,7 +3,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .api import ArrApiClient, ArrUnsupportedOperationError
+from .api import (
+    ArrApiClient,
+    ArrConflictError,
+    ArrNotFoundError,
+    ArrUnsupportedOperationError,
+    normalize_lookup_result,
+)
 
 
 class BaseARRAdapter(ABC):
@@ -19,6 +25,7 @@ class BaseARRAdapter(ABC):
     quality_profile_endpoint: str
     root_folder_endpoint: str
     command_endpoint: str
+    media_endpoint: str
 
     def __init__(self, client: ArrApiClient) -> None:
         self.client = client
@@ -82,7 +89,28 @@ class BaseARRAdapter(ABC):
         return await self.client.get(self.lookup_endpoint, params={"term": query, "limit": max_results})
 
     async def async_add_media(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return await self.client.post(self.command_endpoint, json_body=payload)
+        result = await self.client.post(self.media_endpoint, json_body=payload)
+        return result if isinstance(result, dict) else {}
+
+    async def async_resolve_lookup(self, lookup_id: str) -> dict[str, Any]:
+        """Resolve a stable lookup ID to the current complete ARR lookup payload."""
+        if not lookup_id or ":" not in lookup_id:
+            raise ArrNotFoundError("Invalid lookup_id")
+        _, identifier = lookup_id.split(":", 1)
+        candidates = await self.async_lookup(identifier, max_results=50)
+        matches = []
+        for item in candidates:
+            normalized = normalize_lookup_result(item, self.application)
+            if normalized and normalized.lookup_id == lookup_id:
+                matches.append(item)
+        if not matches:
+            raise ArrNotFoundError(f"Lookup result no longer exists: {lookup_id}")
+        if len(matches) > 1:
+            raise ArrConflictError(f"Lookup ID is not unique: {lookup_id}")
+        return matches[0]
+
+    async def async_search_added_media(self, media_id: str | int) -> dict[str, Any]:
+        raise ArrUnsupportedOperationError(f"Search after add is not supported for {self.application}")
 
     async def async_refresh_library(self) -> dict[str, Any]:
         return await self.client.post(self.command_endpoint, json_body={"name": "RefreshSeries" if self.application == "sonarr" else "RefreshMovie" if self.application == "radarr" else "RefreshArtist"})

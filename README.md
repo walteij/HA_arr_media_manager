@@ -57,7 +57,7 @@ The selected config entry determines whether the request goes to Sonarr, Radarr,
 
 ## Lovelace result selection card
 
-For a lookup-first workflow, use `www/arr-media-search-card.js`. It calls `arr_media_manager.lookup`, shows every normalized result with poster, title, year, media type, and existing status, and provides an `Add` button for each result. The selected result is sent to `arr_media_manager.add_media` using its `lookup_id`.
+For a lookup-first workflow, use `www/arr-media-search-card.js`. It calls `arr_media_manager.lookup`, shows every normalized result with poster, title, year, media type, overview, and existing status, and provides an `Add` button for each result. The selected result is sent to `arr_media_manager.add_media` using its stable `lookup_id`.
 
 Copy the file to `<config>/www/arr-media-search-card.js`, register `/local/arr-media-search-card.js` as a JavaScript module resource, and add this card:
 
@@ -77,7 +77,9 @@ quality_profile_options:
     label: 4K
 ```
 
-The card editor provides a config-entry selector filtered to `arr_media_manager`. The config entry determines whether the request goes to Sonarr, Radarr, or Lidarr; there is no separate application selector. `root_folder_options` and `quality_profile_options` are optional because these values are instance-specific. When supplied, they are rendered as selectors and passed to `add_media`.
+  Supported card options include `title`, `config_entry_id`, `max_results`, `search_after_add`, `show_overview`, `show_posters`, `show_existing`, `confirm_before_add`, `default_query`, `compact`, `result_columns`, and `hide_application_name`. The card editor provides a config-entry selector filtered to `arr_media_manager`. The config entry determines whether the request goes to Sonarr, Radarr, or Lidarr; there is no separate application selector. `root_folder_options` and `quality_profile_options` are optional because these values are instance-specific. When supplied, they are rendered as selectors and passed to `add_media`.
+
+  Home Assistant does not automatically register JavaScript files from a custom integration's root `www/` folder. Register `/local/arr-media-search-card.js` manually as a JavaScript module after copying the file to `<config>/www/`. Restart Home Assistant after installing or upgrading the integration, then hard-refresh the browser if an older card remains cached. The card exposes version `1.0.0` and guards custom-element registration so loading the resource twice does not throw.
 
 ## Manual installation
 

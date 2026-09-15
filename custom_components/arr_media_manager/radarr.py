@@ -18,6 +18,7 @@ class RadarrAdapter(BaseARRAdapter):
     quality_profile_endpoint = "/api/v3/qualityprofile"
     root_folder_endpoint = "/api/v3/rootfolder"
     command_endpoint = "/api/v3/command"
+    media_endpoint = "/api/v3/movie"
 
     @property
     def supported_actions(self) -> set[str]:
@@ -64,6 +65,9 @@ class RadarrAdapter(BaseARRAdapter):
 
     async def async_search_monitored_movies(self) -> dict[str, Any]:
         return await self.async_trigger_command("MoviesSearch")
+
+    async def async_search_added_media(self, media_id: str | int) -> dict[str, Any]:
+        return await self.async_trigger_command("MoviesSearch", movieId=int(media_id))
 
     async def async_refresh_all_movies(self) -> dict[str, Any]:
         return await self.async_trigger_command("RefreshMovie")

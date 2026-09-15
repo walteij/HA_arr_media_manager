@@ -31,21 +31,6 @@ add_media:
       required: true
       selector:
         text:
-    title:
-      selector:
-        text:
-    year:
-      selector:
-        number:
-          min: 1900
-          max: 2100
-          step: 1
-    foreign_id:
-      selector:
-        text:
-    media_type:
-      selector:
-        text:
     root_folder:
       selector:
         text:

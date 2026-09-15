@@ -101,16 +101,14 @@ class QualityProfile:
 
 @dataclass(slots=True)
 class LookupResult:
-    id: str | int | None = None
+    lookup_id: str
     title: str | None = None
     year: int | None = None
     media_type: str | None = None
     foreign_id: str | None = None
     overview: str | None = None
     poster_url: str | None = None
-    existing: bool = False
-    application_id: str | int | None = None
-    raw: dict[str, Any] | None = None
+    already_exists: bool = False
 
 
 @dataclass(slots=True)
@@ -373,18 +371,33 @@ def normalize_quality_profiles(data: list[dict[str, Any]] | None) -> list[Qualit
     return result
 
 
-def normalize_lookup_result(data: dict[str, Any] | None) -> LookupResult | None:
+def normalize_lookup_result(data: dict[str, Any] | None, application: str = "arr") -> LookupResult | None:
     if not isinstance(data, dict):
         return None
+    foreign_id = data.get("foreignId") or data.get("tvdbId") or data.get("tmdbId") or data.get("imdbId")
+    if data.get("tvdbId") is not None:
+        lookup_id = f"tvdb:{data['tvdbId']}"
+    elif data.get("tmdbId") is not None:
+        lookup_id = f"tmdb:{data['tmdbId']}"
+    elif data.get("imdbId") is not None:
+        lookup_id = f"imdb:{data['imdbId']}"
+    elif data.get("foreignId") is not None:
+        lookup_id = f"foreign:{data['foreignId']}"
+    elif data.get("id") is not None:
+        lookup_id = f"{application}:{data['id']}"
+    else:
+        return None
     return LookupResult(
-        id=data.get("id") or data.get("tmdbId") or data.get("foreignId"),
+        lookup_id=lookup_id,
         title=data.get("title") or data.get("name"),
         year=data.get("year"),
-        media_type=data.get("mediaType") or data.get("type"),
-        foreign_id=data.get("foreignId") or data.get("tvdbId") or data.get("imdbId"),
+        media_type=data.get("mediaType") or data.get("type") or {
+            "sonarr": "series",
+            "radarr": "movie",
+            "lidarr": "artist",
+        }.get(application),
+        foreign_id=str(foreign_id) if foreign_id is not None else None,
         overview=data.get("overview"),
         poster_url=data.get("remotePoster") or data.get("posterUrl"),
-        existing=bool(data.get("existing")),
-        application_id=data.get("id"),
-        raw=data,
+        already_exists=bool(data.get("existing") or data.get("inLibrary")),
     )

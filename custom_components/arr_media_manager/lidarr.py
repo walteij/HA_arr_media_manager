@@ -18,6 +18,7 @@ class LidarrAdapter(BaseARRAdapter):
     quality_profile_endpoint = "/api/v1/qualityprofile"
     root_folder_endpoint = "/api/v1/rootfolder"
     command_endpoint = "/api/v1/command"
+    media_endpoint = "/api/v1/artist"
 
     @property
     def supported_actions(self) -> set[str]:
@@ -57,7 +58,10 @@ class LidarrAdapter(BaseARRAdapter):
         return payload
 
     async def async_search_monitored_albums(self) -> dict[str, Any]:
-        return await self.async_trigger_command("MoviesSearch")
+        return await self.async_trigger_command("MissingAlbumSearch")
+
+    async def async_search_added_media(self, media_id: str | int) -> dict[str, Any]:
+        return await self.async_trigger_command("MissingAlbumSearch", artistId=int(media_id))
 
     async def async_refresh_all_artists(self) -> dict[str, Any]:
         return await self.async_trigger_command("RefreshArtist")

@@ -7,8 +7,14 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
-from .api import normalize_lookup_result
-from .const import DOMAIN
+from .api import ArrApiError, ArrConflictError, normalize_lookup_result
+from .const import (
+    CONF_AUTO_SEARCH,
+    CONF_DEFAULT_MONITORING_MODE,
+    CONF_DEFAULT_QUALITY_PROFILE,
+    CONF_DEFAULT_ROOT_FOLDER,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +29,10 @@ def _get_entry_runtime(hass: HomeAssistant, call: ServiceCall) -> tuple[Any, Any
     runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     if runtime is None:
         raise ValueError(f"ARR integration not initialized for {entry_id}")
-    return entry, runtime["adapter"]
+    adapter = runtime.get("adapter")
+    if adapter is None or getattr(adapter, "application", None) != entry.data.get("application"):
+        raise ValueError(f"ARR integration has no valid adapter for {entry_id}")
+    return entry, adapter
 
 
 async def async_register_services(hass: HomeAssistant) -> None:
@@ -71,7 +80,7 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 
 
 async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
-    _, adapter = _get_entry_runtime(hass, call)
+    entry, adapter = _get_entry_runtime(hass, call)
     query = str(call.data.get("query") or "")
     max_results = int(call.data.get("max_results", 10))
     if not query:
@@ -80,39 +89,96 @@ async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[st
     results = [
         asdict(normalized)
         for item in raw_results
-        if (normalized := normalize_lookup_result(item)) is not None
+        if (normalized := normalize_lookup_result(item, adapter.application)) is not None
     ]
-    return {"count": len(results), "results": results}
+    return {
+        "status": "ok",
+        "config_entry_id": entry.entry_id,
+        "application": adapter.application,
+        "query": query,
+        "count": len(results),
+        "results": results,
+    }
 
 
 async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
-    _, adapter = _get_entry_runtime(hass, call)
+    entry, adapter = _get_entry_runtime(hass, call)
     lookup_id = call.data.get("lookup_id")
     if lookup_id is None:
         raise ValueError("lookup_id is required")
-    lookup_result: dict[str, Any] = {
-        "id": lookup_id,
-        "title": call.data.get("title") or str(lookup_id),
-        "year": call.data.get("year"),
-        "mediaType": call.data.get("media_type"),
-    }
-    foreign_id = call.data.get("foreign_id")
-    if foreign_id is not None:
-        if adapter.application == "sonarr":
-            lookup_result["tvdbId"] = foreign_id
-        elif adapter.application == "radarr":
-            lookup_result["tmdbId"] = foreign_id
-        else:
-            lookup_result["foreignId"] = foreign_id
+    lookup_result = await adapter.async_resolve_lookup(str(lookup_id))
+    normalized = normalize_lookup_result(lookup_result, adapter.application)
+    if normalized is None or normalized.lookup_id != str(lookup_id):
+        raise ValueError("lookup_id could not be resolved")
+    if normalized.already_exists:
+        raise ArrConflictError(f"{normalized.title or lookup_id} is already in the library")
     payload = adapter.build_media_payload(
         lookup_result,
-        root_folder=call.data.get("root_folder"),
-        quality_profile=call.data.get("quality_profile"),
-        monitoring_mode=call.data.get("monitoring_mode"),
-        search_after_add=bool(call.data.get("search_after_add", False)),
+        root_folder=call.data.get("root_folder") or entry.data.get(CONF_DEFAULT_ROOT_FOLDER),
+        quality_profile=call.data.get("quality_profile") or entry.data.get(CONF_DEFAULT_QUALITY_PROFILE),
+        monitoring_mode=call.data.get("monitoring_mode") or entry.data.get(CONF_DEFAULT_MONITORING_MODE),
+        search_after_add=bool(call.data.get("search_after_add", entry.data.get(CONF_AUTO_SEARCH, False))),
     )
     result = await adapter.async_add_media(payload)
-    return {"status": "ok", "result": result}
+    media_id = result.get("id")
+    search_requested = bool(call.data.get("search_after_add", entry.data.get(CONF_AUTO_SEARCH, False)))
+    search_accepted = False
+    if search_requested:
+        if media_id is None:
+            return {
+                "status": "partial_success",
+                "config_entry_id": entry.entry_id,
+                "application": adapter.application,
+                "added": True,
+                "already_exists": False,
+                "search_requested": True,
+                "search_accepted": False,
+                "media": {
+                    "media_id": None,
+                    "lookup_id": normalized.lookup_id,
+                    "title": normalized.title,
+                    "year": normalized.year,
+                    "media_type": normalized.media_type,
+                },
+                "message": "Media added, but ARR did not return a media ID for the search request.",
+            }
+        try:
+            await adapter.async_search_added_media(media_id)
+            search_accepted = True
+        except ArrApiError as err:
+            return {
+                "status": "partial_success",
+                "config_entry_id": entry.entry_id,
+                "application": adapter.application,
+                "added": True,
+                "already_exists": False,
+                "search_requested": True,
+                "search_accepted": False,
+                "media": {
+                    "media_id": media_id,
+                    "lookup_id": normalized.lookup_id,
+                    "title": normalized.title,
+                    "year": normalized.year,
+                    "media_type": normalized.media_type,
+                },
+                "message": f"Media added, but the search could not be started: {err}",
+            }
+    return {
+        "status": "ok",
+        "config_entry_id": entry.entry_id,
+        "application": adapter.application,
+        "added": True,
+        "already_exists": False,
+        "search_requested": search_requested,
+        "search_accepted": search_accepted,
+        "media": {
+            "media_id": media_id,
+            "lookup_id": normalized.lookup_id,
+            "title": normalized.title,
+            "year": normalized.year,
+            "media_type": normalized.media_type,
+        },
+    }
 
 
 async def async_handle_search_and_add(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
