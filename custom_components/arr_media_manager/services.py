@@ -6,7 +6,12 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall
 
-from .const import DOMAIN
+from .const import (
+    APPLICATION_LIDARR,
+    APPLICATION_RADARR,
+    APPLICATION_SONARR,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +60,15 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 
 async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     _, adapter = _get_entry_runtime(hass, call)
+    application = str(call.data.get("application") or "").lower()
+    if application not in {
+        APPLICATION_SONARR,
+        APPLICATION_RADARR,
+        APPLICATION_LIDARR,
+    }:
+        raise ValueError("application must be sonarr, radarr, or lidarr")
+    if adapter.application != application:
+        raise ValueError("application does not match the selected config entry")
     query = str(call.data.get("query") or "")
     max_results = int(call.data.get("max_results", 10))
     if not query:

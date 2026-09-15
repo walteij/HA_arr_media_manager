@@ -6,6 +6,18 @@ lookup:
       required: true
       selector:
         config_entry:
+    application:
+      required: true
+      description: Choose which ARR application to search.
+      selector:
+        select:
+          options:
+            - label: Sonarr
+              value: sonarr
+            - label: Radarr
+              value: radarr
+            - label: Lidarr
+              value: lidarr
     query:
       required: true
       selector:
