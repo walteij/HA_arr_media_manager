@@ -1,31 +1,16 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 from functools import partial
 from typing import Any
 
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
-from .const import (
-    APPLICATION_LIDARR,
-    APPLICATION_RADARR,
-    APPLICATION_SONARR,
-    DOMAIN,
-)
+from .api import normalize_lookup_result
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _validate_application(adapter: Any, application: str) -> None:
-    supported_applications = {
-        APPLICATION_SONARR,
-        APPLICATION_RADARR,
-        APPLICATION_LIDARR,
-    }
-    if application not in supported_applications:
-        raise ValueError("application must be sonarr, radarr, or lidarr")
-    if adapter.application != application:
-        raise ValueError("application does not match the selected config entry")
 
 
 def _get_entry_runtime(hass: HomeAssistant, call: ServiceCall) -> tuple[Any, Any]:
@@ -43,17 +28,32 @@ def _get_entry_runtime(hass: HomeAssistant, call: ServiceCall) -> tuple[Any, Any
 
 async def async_register_services(hass: HomeAssistant) -> None:
     """Register integration services when at least one config entry is loaded."""
-    for service_name, handler in {
+    response_modes = {
+        "lookup": SupportsResponse.ONLY,
+        "add_media": SupportsResponse.OPTIONAL,
+        "search_and_add": SupportsResponse.OPTIONAL,
+        "trigger_search": SupportsResponse.OPTIONAL,
+        "refresh": SupportsResponse.OPTIONAL,
+        "delete_media": SupportsResponse.OPTIONAL,
+    }
+    handlers = {
         "lookup": async_handle_lookup,
         "add_media": async_handle_add_media,
         "search_and_add": async_handle_search_and_add,
         "trigger_search": async_handle_trigger_search,
         "refresh": async_handle_refresh,
         "delete_media": async_handle_delete_media,
-    }.items():
+    }
+    for service_name, handler in handlers.items():
         if hass.services.has_service(DOMAIN, service_name):
             continue
-        hass.services.async_register(DOMAIN, service_name, partial(handler, hass), schema=None)
+        hass.services.async_register(
+            DOMAIN,
+            service_name,
+            partial(handler, hass),
+            schema=None,
+            supports_response=response_modes[service_name],
+        )
 
 
 async def async_unregister_services(hass: HomeAssistant) -> None:
@@ -72,13 +72,16 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 
 async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     _, adapter = _get_entry_runtime(hass, call)
-    application = str(call.data.get("application") or "").lower()
-    _validate_application(adapter, application)
     query = str(call.data.get("query") or "")
     max_results = int(call.data.get("max_results", 10))
     if not query:
         raise ValueError("query is required")
-    results = await adapter.async_lookup(query, max_results=max_results)
+    raw_results = await adapter.async_lookup(query, max_results=max_results)
+    results = [
+        asdict(normalized)
+        for item in raw_results
+        if (normalized := normalize_lookup_result(item)) is not None
+    ]
     return {"count": len(results), "results": results}
 
 
@@ -100,8 +103,6 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
 
 async def async_handle_search_and_add(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     _, adapter = _get_entry_runtime(hass, call)
-    application = str(call.data.get("application") or "").lower()
-    _validate_application(adapter, application)
     query = str(call.data.get("query") or "")
     if not query:
         raise ValueError("query is required")

@@ -51,10 +51,9 @@ The repository includes a simple card for searching an ARR application and immed
 type: custom:arr-media-manager-card
 title: ARR zoeken
 config_entry_id: YOUR_CONFIG_ENTRY_ID
-application: radarr
 ```
 
-The card sends `arr_media_manager.search_and_add` with `search_after_add: true`. The selected config entry must belong to the selected application.
+The selected config entry determines whether the request goes to Sonarr, Radarr, or Lidarr. The card sends `arr_media_manager.search_and_add` with `search_after_add: true`.
 
 ## Manual installation
 

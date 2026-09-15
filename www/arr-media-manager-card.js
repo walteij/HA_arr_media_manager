@@ -5,7 +5,6 @@ class ArrMediaManagerCard extends HTMLElement {
     }
     this._config = {
       title: "ARR Media Manager",
-      application: "radarr",
       search_after_add: true,
       ...config,
     };
@@ -33,21 +32,6 @@ class ArrMediaManagerCard extends HTMLElement {
     const title = document.createElement("h2");
     title.textContent = this._config.title;
     content.appendChild(title);
-
-    const application = document.createElement("select");
-    application.className = "application";
-    for (const option of [
-      ["sonarr", "Sonarr"],
-      ["radarr", "Radarr"],
-      ["lidarr", "Lidarr"],
-    ]) {
-      const item = document.createElement("option");
-      item.value = option[0];
-      item.textContent = option[1];
-      application.appendChild(item);
-    }
-    application.value = this._config.application;
-    content.appendChild(application);
 
     const query = document.createElement("input");
     query.className = "query";
@@ -82,7 +66,6 @@ class ArrMediaManagerCard extends HTMLElement {
       try {
         await this._hass.callService("arr_media_manager", "search_and_add", {
           config_entry_id: this._config.config_entry_id,
-          application: application.value,
           query: value,
           search_after_add: Boolean(this._config.search_after_add),
           exact_match: Boolean(this._config.exact_match ?? false),
