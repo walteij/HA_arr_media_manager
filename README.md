@@ -55,6 +55,30 @@ config_entry_id: YOUR_CONFIG_ENTRY_ID
 
 The selected config entry determines whether the request goes to Sonarr, Radarr, or Lidarr. The card sends `arr_media_manager.search_and_add` with `search_after_add: true`.
 
+## Lovelace result selection card
+
+For a lookup-first workflow, use `www/arr-media-search-card.js`. It calls `arr_media_manager.lookup`, shows every normalized result with poster, title, year, media type, and existing status, and provides an `Add` button for each result. The selected result is sent to `arr_media_manager.add_media` using its `lookup_id`.
+
+Copy the file to `<config>/www/arr-media-search-card.js`, register `/local/arr-media-search-card.js` as a JavaScript module resource, and add this card:
+
+```yaml
+type: custom:arr-media-search-card
+title: ARR media zoeken
+config_entry_id: YOUR_CONFIG_ENTRY_ID
+search_after_add: true
+monitoring_mode: all
+root_folder_options:
+  - /media/movies
+  - /media/tv
+quality_profile_options:
+  - value: 1
+    label: HD-1080p
+  - value: 2
+    label: 4K
+```
+
+The card editor provides a config-entry selector filtered to `arr_media_manager`. The config entry determines whether the request goes to Sonarr, Radarr, or Lidarr; there is no separate application selector. `root_folder_options` and `quality_profile_options` are optional because these values are instance-specific. When supplied, they are rendered as selectors and passed to `add_media`.
+
 ## Manual installation
 
 Copy the folder

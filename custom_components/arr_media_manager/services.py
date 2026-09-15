@@ -90,8 +90,22 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
     lookup_id = call.data.get("lookup_id")
     if lookup_id is None:
         raise ValueError("lookup_id is required")
+    lookup_result: dict[str, Any] = {
+        "id": lookup_id,
+        "title": call.data.get("title") or str(lookup_id),
+        "year": call.data.get("year"),
+        "mediaType": call.data.get("media_type"),
+    }
+    foreign_id = call.data.get("foreign_id")
+    if foreign_id is not None:
+        if adapter.application == "sonarr":
+            lookup_result["tvdbId"] = foreign_id
+        elif adapter.application == "radarr":
+            lookup_result["tmdbId"] = foreign_id
+        else:
+            lookup_result["foreignId"] = foreign_id
     payload = adapter.build_media_payload(
-        {"title": call.data.get("title") or str(lookup_id), "id": lookup_id},
+        lookup_result,
         root_folder=call.data.get("root_folder"),
         quality_profile=call.data.get("quality_profile"),
         monitoring_mode=call.data.get("monitoring_mode"),
