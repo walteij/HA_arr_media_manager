@@ -16,6 +16,18 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _validate_application(adapter: Any, application: str) -> None:
+    supported_applications = {
+        APPLICATION_SONARR,
+        APPLICATION_RADARR,
+        APPLICATION_LIDARR,
+    }
+    if application not in supported_applications:
+        raise ValueError("application must be sonarr, radarr, or lidarr")
+    if adapter.application != application:
+        raise ValueError("application does not match the selected config entry")
+
+
 def _get_entry_runtime(hass: HomeAssistant, call: ServiceCall) -> tuple[Any, Any]:
     entry_id = call.data.get("config_entry_id")
     if not entry_id:
@@ -61,14 +73,7 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 async def async_handle_lookup(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     _, adapter = _get_entry_runtime(hass, call)
     application = str(call.data.get("application") or "").lower()
-    if application not in {
-        APPLICATION_SONARR,
-        APPLICATION_RADARR,
-        APPLICATION_LIDARR,
-    }:
-        raise ValueError("application must be sonarr, radarr, or lidarr")
-    if adapter.application != application:
-        raise ValueError("application does not match the selected config entry")
+    _validate_application(adapter, application)
     query = str(call.data.get("query") or "")
     max_results = int(call.data.get("max_results", 10))
     if not query:
@@ -95,6 +100,8 @@ async def async_handle_add_media(hass: HomeAssistant, call: ServiceCall) -> dict
 
 async def async_handle_search_and_add(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     _, adapter = _get_entry_runtime(hass, call)
+    application = str(call.data.get("application") or "").lower()
+    _validate_application(adapter, application)
     query = str(call.data.get("query") or "")
     if not query:
         raise ValueError("query is required")

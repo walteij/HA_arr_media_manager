@@ -55,12 +55,24 @@ add_media:
 
 search_and_add:
   name: Search and add
-  description: Find the best exact match and add it safely.
+  description: Find the best match, add it, and optionally start the download.
   fields:
     config_entry_id:
       required: true
       selector:
         config_entry:
+    application:
+      required: true
+      description: Choose which ARR application to search.
+      selector:
+        select:
+          options:
+            - label: Sonarr
+              value: sonarr
+            - label: Radarr
+              value: radarr
+            - label: Lidarr
+              value: lidarr
     query:
       required: true
       selector:

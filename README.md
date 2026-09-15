@@ -39,6 +39,23 @@ This section is intentionally left as a placeholder for screenshots in a normal 
 3. Restart Home Assistant.
 4. Add the integration from Settings > Devices & Services > Add Integration.
 
+## Lovelace search and download card
+
+The repository includes a simple card for searching an ARR application and immediately starting its search/download workflow.
+
+1. Copy `www/arr-media-manager-card.js` to your Home Assistant `config/www/` directory.
+2. Add `/local/arr-media-manager-card.js` as a Lovelace resource of type `JavaScript module`.
+3. Add the card to a dashboard and replace the config entry ID with the ID of the Sonarr, Radarr, or Lidarr entry you want to use.
+
+```yaml
+type: custom:arr-media-manager-card
+title: ARR zoeken
+config_entry_id: YOUR_CONFIG_ENTRY_ID
+application: radarr
+```
+
+The card sends `arr_media_manager.search_and_add` with `search_after_add: true`. The selected config entry must belong to the selected application.
+
 ## Manual installation
 
 Copy the folder
